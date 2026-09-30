@@ -8,6 +8,40 @@ Requires Pi `>=0.99.1 <0.100.0`.
 registered with `pi.registerVirtualModel()`, are not tested with this package.
 Select an `openai-codex-fast` model directly.
 
+## This fork: Pi subagents
+
+This fork keeps upstream's runtime unchanged and is maintained through small,
+reviewed commits. Install a pinned commit rather than following `main`:
+
+```bash
+pi install git:github.com/danth3b0t/pi-openai-codex-fast@<reviewed-commit>
+```
+
+With the local `subagent` extension, a parent can choose a fast child explicitly:
+
+```json
+{"agent":{"model":"openai-codex-fast/gpt-6.1-sol","thinking":"high"},"task":"Review the implementation."}
+```
+
+- `agent: {}` inherits the parent's selected provider/model and thinking.
+- An explicit `openai-codex/<model>` child remains normal even under a fast parent.
+- Fast mode is session-local provider selection, not a global flag. This package
+  adds no model-callable tool for switching the parent's own model.
+- Resume needs the companion fix in `~/.pi/agent/extensions/subagent/sessions.ts`:
+  restore the latest selected `model_change` on the active branch, falling back
+  to the assistant identity only when no selection was recorded. Canonical
+  `openai-codex` replies must not overwrite the selected fast route. Retain the
+  child's saved thinking and existing model/tool/trust checks.
+- A resumed child keeps its own route, not the parent's current selection.
+  The local `resume` interface does not accept a model override.
+
+Verified on Pi 0.99.1 with upstream's mock-provider tests and isolated child
+startup probes for inherited fast, explicit normal, fast resume, and normal
+resume. The probes use fake credentials and exit before making model requests.
+Real priority-tier requests can consume more quota/cost; paid live tests are
+separate from this verification. Do not run upstream's npm publishing workflow
+for this personal fork.
+
 ## Behavior
 
 `openai-codex-fast` is a separate selectable provider that delegates to Pi's built-in `openai-codex` implementation with the same model id and `serviceTier: "priority"`. Normal `openai-codex/<modelId>` selections are left on the normal/default-tier path.
