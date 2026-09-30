@@ -1,6 +1,6 @@
 # pi-openai-codex-fast Project Instructions
 
-pi-openai-codex-fast is a Pi coding agent extension for exposing OpenAI Codex models through a priority-service-tier `openai-codex-fast` provider.
+pi-openai-codex-fast is a Pi coding agent extension for exposing OpenAI OpenAI models through a priority-service-tier `openai-fast` provider.
 
 ## Conventions
 

@@ -628,7 +628,7 @@ function summarizeAggregate(
 function buildMarkdownSummary(report: Report): string {
   const lines: string[] = [];
   const { normal, fast, matchedInput } = report.summary;
-  lines.push("# OpenAI Codex Fast benchmark summary");
+  lines.push("# OpenAI OpenAI Fast benchmark summary");
   lines.push("");
   lines.push(`- Generated: ${report.createdAt}`);
   lines.push(`- Target: ${report.benchmarkTarget}`);
@@ -678,8 +678,8 @@ function buildMarkdownSummary(report: Report): string {
 }
 
 async function benchmarkModel(modelId: string, benchmarkCases: BenchmarkCase[]): Promise<void> {
-  const normalModel = `openai-codex/${modelId}`;
-  const fastModel = `openai-codex-fast/${modelId}`;
+  const normalModel = `openai/${modelId}`;
+  const fastModel = `openai-fast/${modelId}`;
   console.log(`\nBenchmarking ${modelId}`);
   console.log(`Normal model: ${normalModel}`);
   console.log(`Fast model:   ${fastModel}`);

@@ -28,10 +28,10 @@ import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const extensionPath = resolve(rootDir, process.env["TEST_EXTENSION_PATH"] ?? "index.ts");
 
-const CODEX_PROVIDER = "openai-codex";
-const CODEX_API = "openai-codex-responses";
-const FAST_PROVIDER = "openai-codex-fast";
-const FAST_API = "openai-codex-fast-responses";
+const OPENAI_PROVIDER = "openai";
+const OPENAI_API = "openai-responses";
+const FAST_PROVIDER = "openai-fast";
+const FAST_API = "openai-fast-responses";
 const MODEL_ID = "gpt-5.5";
 const BEHAVIOR_MODEL_IDS = [MODEL_ID, "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"];
 const FAST_MODEL_IDS = [
@@ -81,8 +81,8 @@ type CompletedSseEvent = {
   };
 };
 
-type CodexModelsModule = {
-  getBuiltinModels: (provider: typeof CODEX_PROVIDER) => Model<typeof CODEX_API>[];
+type OpenAIModelsModule = {
+  getBuiltinModels: (provider: typeof OPENAI_PROVIDER) => Model<typeof OPENAI_API>[];
 };
 
 type PackageManifest = {
@@ -97,7 +97,7 @@ interface UsageFixture {
   output: number;
 }
 
-interface CodexResponseBatch {
+interface OpenAIResponseBatch {
   status?: number;
   events?: SseEvent[];
 }
@@ -109,7 +109,7 @@ interface CapturedRequest {
   body: JsonObject;
 }
 
-interface CodexTestServer {
+interface OpenAITestServer {
   baseUrl: string;
   requests: CapturedRequest[];
 }
@@ -117,7 +117,7 @@ interface CodexTestServer {
 interface IntegrationSessionOptions {
   modelId?: string;
   bindExtensions?: boolean;
-  codexBaseUrl?: string;
+  openAIBaseUrl?: string;
   compaction?: CompactionSettings;
   sessionManager?: SessionManager;
   sessionStartReason?: SessionStartEvent["reason"];
@@ -158,7 +158,7 @@ function isAddressInfo(value: AddressInfo | string | null): value is AddressInfo
   return typeof value === "object" && value !== null;
 }
 
-function isCodexModelsModule(value: unknown): value is CodexModelsModule {
+function isOpenAIModelsModule(value: unknown): value is OpenAIModelsModule {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -179,7 +179,7 @@ function base64Json(value: JsonValue): string {
   return Buffer.from(JSON.stringify(value), "utf8").toString("base64");
 }
 
-function fakeCodexToken(): string {
+function fakeOpenAIToken(): string {
   return [
     base64Json({ alg: "none", typ: "JWT" }),
     base64Json({ [ACCOUNT_ID_CLAIM]: { chatgpt_account_id: "acct_test" } }),
@@ -187,21 +187,21 @@ function fakeCodexToken(): string {
   ].join(".");
 }
 
-function codexCredential(token = fakeCodexToken()): Credential {
+function openAICredential(token = fakeOpenAIToken()): Credential {
   return {
     type: "oauth",
     access: token,
     refresh: "refresh_test",
     expires: Date.now() + 60 * 60 * 1000,
-    accountId: "acct_test",
+    clientId: "test_client",
   };
 }
 
-async function writeCodexAuth(agentDir: string, token = fakeCodexToken()): Promise<void> {
+async function writeOpenAIAuth(agentDir: string, token = fakeOpenAIToken()): Promise<void> {
   await mkdir(agentDir, { recursive: true });
   await writeFile(
     join(agentDir, "auth.json"),
-    JSON.stringify({ [CODEX_PROVIDER]: codexCredential(token) }, null, 2),
+    JSON.stringify({ [OPENAI_PROVIDER]: openAICredential(token) }, null, 2),
   );
 }
 
@@ -301,10 +301,10 @@ function sse(events: SseEvent[]): string {
   return `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
 }
 
-async function startCodexServer(
+async function startOpenAIServer(
   t: TestContext,
-  responseBatches: CodexResponseBatch[],
-): Promise<CodexTestServer> {
+  responseBatches: OpenAIResponseBatch[],
+): Promise<OpenAITestServer> {
   const requests: CapturedRequest[] = [];
   let requestIndex = 0;
   const server = createServer((req, res) => {
@@ -369,9 +369,9 @@ async function startCodexServer(
   return { baseUrl: `http://127.0.0.1:${address.port}`, requests };
 }
 
-async function pointBuiltInCodexAt(baseUrl: string, t: TestContext): Promise<void> {
-  type GetCodexModels = () => Model<typeof CODEX_API>[];
-  const getCodexModels: GetCodexModels[] = [() => getBuiltinModels(CODEX_PROVIDER)];
+async function pointBuiltInOpenAIAt(baseUrl: string, t: TestContext): Promise<void> {
+  type GetOpenAIModels = () => Model<typeof OPENAI_API>[];
+  const getOpenAIModels: GetOpenAIModels[] = [() => getBuiltinModels(OPENAI_PROVIDER)];
   const nestedPiAiPath = resolve(
     rootDir,
     "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/dist/providers/all.js",
@@ -379,9 +379,9 @@ async function pointBuiltInCodexAt(baseUrl: string, t: TestContext): Promise<voi
 
   try {
     const nestedPiAi: unknown = await import(pathToFileURL(nestedPiAiPath).href);
-    if (isCodexModelsModule(nestedPiAi)) {
+    if (isOpenAIModelsModule(nestedPiAi)) {
       const getNestedModels = nestedPiAi.getBuiltinModels;
-      getCodexModels.push(() => getNestedModels(CODEX_PROVIDER));
+      getOpenAIModels.push(() => getNestedModels(OPENAI_PROVIDER));
     }
   } catch (error) {
     if (!(error instanceof Error && "code" in error && error.code === "ERR_MODULE_NOT_FOUND")) {
@@ -390,8 +390,8 @@ async function pointBuiltInCodexAt(baseUrl: string, t: TestContext): Promise<voi
     // No nested Pi AI copy is installed in this dependency layout.
   }
 
-  const previousBaseUrls: Array<[Model<typeof CODEX_API>, string]> = [];
-  for (const getModels of getCodexModels) {
+  const previousBaseUrls: Array<[Model<typeof OPENAI_API>, string]> = [];
+  for (const getModels of getOpenAIModels) {
     const models = getModels();
     for (const model of models) {
       previousBaseUrls.push([model, model.baseUrl]);
@@ -439,11 +439,11 @@ async function createIntegrationSession(
   const cwd = join(tempRoot, "cwd");
   const agentDir = join(tempRoot, "agent");
   await mkdir(cwd, { recursive: true });
-  await writeCodexAuth(agentDir);
+  await writeOpenAIAuth(agentDir);
   t.after(async () => rm(tempRoot, { recursive: true, force: true }));
 
-  if (options.codexBaseUrl) {
-    await pointBuiltInCodexAt(options.codexBaseUrl, t);
+  if (options.openAIBaseUrl) {
+    await pointBuiltInOpenAIAt(options.openAIBaseUrl, t);
   }
 
   const modelRuntime = await createTestModelRuntime(agentDir);
@@ -468,8 +468,8 @@ async function createIntegrationSession(
   await reloadResourceLoaderWithAgentDir(resourceLoader, agentDir);
 
   const modelId = options.modelId ?? MODEL_ID;
-  const initialModel = modelRuntime.getModel(CODEX_PROVIDER, modelId);
-  assert.ok(initialModel, `Expected built-in ${CODEX_PROVIDER}/${modelId} to exist`);
+  const initialModel = modelRuntime.getModel(OPENAI_PROVIDER, modelId);
+  assert.ok(initialModel, `Expected built-in ${OPENAI_PROVIDER}/${modelId} to exist`);
 
   const sessionOptions: CreateAgentSessionOptions = {
     cwd,
@@ -520,8 +520,8 @@ function assistantMessages(session: AgentSession): AssistantMessage[] {
 
 function assertCanonicalAssistantMessages(session: AgentSession): void {
   for (const message of assistantMessages(session)) {
-    assert.equal(message.provider, CODEX_PROVIDER);
-    assert.equal(message.api, CODEX_API);
+    assert.equal(message.provider, OPENAI_PROVIDER);
+    assert.equal(message.api, OPENAI_API);
   }
 }
 
@@ -542,7 +542,7 @@ test("package manifest keeps npm package name while loading the top-level extens
   assert.deepEqual(packageJson.pi.extensions, ["./index.ts"]);
 });
 
-test("registers fast models before session_start without requiring Codex auth", async (t) => {
+test("registers fast models before session_start without requiring OpenAI auth", async (t) => {
   const tempRoot = await mkdtemp(join(tmpdir(), "pi-openai-codex-fast-no-auth-"));
   const cwd = join(tempRoot, "cwd");
   const agentDir = join(tempRoot, "agent");
@@ -611,12 +611,12 @@ test("loads through Pi's resource loader and registers a real fast provider", as
 
 for (const modelId of BEHAVIOR_MODEL_IDS) {
   test(`${modelId} uses priority with canonical history and preserves the normal-tier control`, async (t) => {
-    const server = await startCodexServer(t, [
+    const server = await startOpenAIServer(t, [
       { events: textResponseEvents("fast ok") },
       { events: textResponseEvents("normal ok", "resp_normal") },
     ]);
     const { session } = await createIntegrationSession(t, {
-      codexBaseUrl: server.baseUrl,
+      openAIBaseUrl: server.baseUrl,
       modelId,
     });
 
@@ -627,19 +627,23 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
     const request = server.requests[0];
     assert.ok(request);
     assert.equal(request.method, "POST");
-    assert.equal(request.url, "/codex/responses");
-    assert.equal(request.headers.authorization, `Bearer ${fakeCodexToken()}`);
+    assert.equal(request.url, "/responses");
+    assert.equal(request.headers.authorization, `Bearer ${fakeOpenAIToken()}`);
     assert.equal(request.body["model"], modelId);
     assert.equal(request.body["service_tier"], "priority");
-    assert.ok(isString(request.body["instructions"]));
-    assert.notEqual(request.body["instructions"], "You are a helpful assistant.");
+    assert.ok(Array.isArray(request.body["input"]));
+    assert.ok(
+      request.body["input"].some(
+        (item) => isJsonObject(item) && (item["role"] === "developer" || item["role"] === "system"),
+      ),
+    );
     // Thinking starts off. Models without an off level, such as GPT-6.1 Sol, clamp to
     // Pi's lowest supported level, which requests low effort with reasoning summaries.
-    const codexModel = session.modelRuntime.getModel(CODEX_PROVIDER, modelId);
-    assert.ok(codexModel);
+    const openAIModel = session.modelRuntime.getModel(OPENAI_PROVIDER, modelId);
+    assert.ok(openAIModel);
     assert.deepEqual(
       request.body["reasoning"],
-      codexModel.thinkingLevelMap?.off === null
+      openAIModel.thinkingLevelMap?.off === null
         ? { effort: "low", summary: "auto" }
         : { effort: "none" },
     );
@@ -648,8 +652,8 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
     assert.equal(messages.length, 1);
     const message = messages[0];
     assert.ok(message);
-    assert.equal(message.provider, CODEX_PROVIDER);
-    assert.equal(message.api, CODEX_API);
+    assert.equal(message.provider, OPENAI_PROVIDER);
+    assert.equal(message.api, OPENAI_API);
     assert.equal(message.model, modelId);
     const content = message.content[0];
     if (!content || content.type !== "text") {
@@ -659,12 +663,11 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
     assertCanonicalAssistantMessages(session);
     assert.ok(!session.sessionManager.getBranch().some((entry) => entry.type === "custom"));
 
-    const normalModel = session.modelRuntime.getModel(CODEX_PROVIDER, modelId);
+    const normalModel = session.modelRuntime.getModel(OPENAI_PROVIDER, modelId);
     assert.ok(normalModel);
     const normalCost = (10 * normalModel.cost.input + 5 * normalModel.cost.output) / 1_000_000;
-    // Pi prices a requested priority tier even when Codex echoes "default".
-    const priorityMultiplier = modelId === "gpt-5.5" ? 2.5 : 2;
-    assert.ok(Math.abs(message.usage.cost.total - normalCost * priorityMultiplier) < 1e-12);
+    // OpenAI pricing follows the returned tier, even when priority was requested.
+    assert.ok(Math.abs(message.usage.cost.total - normalCost) < 1e-12);
     await session.setModel(normalModel);
     await session.prompt("normal control", { expandPromptTemplates: false });
     assert.equal(server.requests.length, 2);
@@ -678,11 +681,11 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
 }
 
 for (const modelId of ["gpt-5.6-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"]) {
-  test(`${modelId} preserves transcript prompts and tool changes through the built-in Codex adapter`, async (t) => {
-    const server = await startCodexServer(t, [{ events: textResponseEvents("ok") }]);
+  test(`${modelId} preserves transcript prompts and tool changes through the built-in OpenAI adapter`, async (t) => {
+    const server = await startOpenAIServer(t, [{ events: textResponseEvents("ok") }]);
     let guidance = "Initial synthetic guidance";
     const { session } = await createIntegrationSession(t, {
-      codexBaseUrl: server.baseUrl,
+      openAIBaseUrl: server.baseUrl,
       modelId,
       noTools: "builtin",
       extensionFactories: [
@@ -746,7 +749,7 @@ for (const modelId of ["gpt-5.6-sol", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"])
 
 for (const modelId of BEHAVIOR_MODEL_IDS) {
   test(`${modelId} remaps fast context overflow errors and lets Pi compact and retry`, async (t) => {
-    const server = await startCodexServer(t, [
+    const server = await startOpenAIServer(t, [
       { events: textResponseEvents("seed ok", "resp_seed") },
       { events: contextOverflowResponseEvents() },
       { events: textResponseEvents("overflow summary", "resp_summary") },
@@ -755,7 +758,7 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
       { events: textResponseEvents("recovered after compaction", "resp_retry") },
     ]);
     const { session } = await createIntegrationSession(t, {
-      codexBaseUrl: server.baseUrl,
+      openAIBaseUrl: server.baseUrl,
       modelId,
       // Keep no recent history so the seed exchange is summarized before retrying.
       compaction: { enabled: true, keepRecentTokens: 0, reserveTokens: 16_384 },
@@ -804,15 +807,15 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
     assert.ok(overflowError);
     assert.ok(retrySuccess);
     assert.equal(seedSuccess.stopReason, "stop");
-    assert.equal(seedSuccess.provider, CODEX_PROVIDER);
-    assert.equal(seedSuccess.api, CODEX_API);
+    assert.equal(seedSuccess.provider, OPENAI_PROVIDER);
+    assert.equal(seedSuccess.api, OPENAI_API);
     assert.equal(overflowError.stopReason, "error");
     assert.equal(overflowError.provider, FAST_PROVIDER);
-    assert.equal(overflowError.api, CODEX_API);
+    assert.equal(overflowError.api, OPENAI_API);
     assert.match(overflowError.errorMessage ?? "", /exceeds the context window/i);
     assert.equal(retrySuccess.stopReason, "stop");
-    assert.equal(retrySuccess.provider, CODEX_PROVIDER);
-    assert.equal(retrySuccess.api, CODEX_API);
+    assert.equal(retrySuccess.provider, OPENAI_PROVIDER);
+    assert.equal(retrySuccess.api, OPENAI_API);
     const content = retrySuccess.content[0];
     if (!content || content.type !== "text") {
       assert.fail("Expected retry success to contain text");
@@ -821,12 +824,12 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
   });
 
   test(`${modelId} stores tool-calling fast replies canonically through the real Pi agent loop`, async (t) => {
-    const server = await startCodexServer(t, [
+    const server = await startOpenAIServer(t, [
       { events: toolCallResponseEvents() },
       { events: textResponseEvents("tool follow-up complete", "resp_after_tool") },
     ]);
     const { session } = await createIntegrationSession(t, {
-      codexBaseUrl: server.baseUrl,
+      openAIBaseUrl: server.baseUrl,
       modelId,
     });
 
@@ -842,8 +845,8 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
     const secondMessage = messages[1];
     assert.ok(firstMessage);
     assert.ok(secondMessage);
-    assert.equal(firstMessage.provider, CODEX_PROVIDER);
-    assert.equal(firstMessage.api, CODEX_API);
+    assert.equal(firstMessage.provider, OPENAI_PROVIDER);
+    assert.equal(firstMessage.api, OPENAI_API);
     const firstContent = firstMessage.content[0];
     if (!firstContent || firstContent.type !== "toolCall") {
       assert.fail("Expected first assistant message to contain a tool call");
@@ -857,16 +860,16 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
   });
 
   test(`${modelId} stores fast setup errors canonically without sending a provider request`, async (t) => {
-    const server = await startCodexServer(t, [
+    const server = await startOpenAIServer(t, [
       { events: textResponseEvents("should not be requested") },
     ]);
     const { session } = await createIntegrationSession(t, {
-      codexBaseUrl: server.baseUrl,
+      openAIBaseUrl: server.baseUrl,
       modelId,
     });
 
     await selectFastModel(session, modelId);
-    await session.modelRuntime.logout(CODEX_PROVIDER);
+    await session.modelRuntime.logout(OPENAI_PROVIDER);
     await session.prompt("this should fail before fetch", { expandPromptTemplates: false });
 
     assert.equal(server.requests.length, 0);
@@ -874,11 +877,11 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
     assert.equal(messages.length, 1);
     const message = messages[0];
     assert.ok(message);
-    assert.equal(message.provider, CODEX_PROVIDER);
-    assert.equal(message.api, CODEX_API);
+    assert.equal(message.provider, OPENAI_PROVIDER);
+    assert.equal(message.api, OPENAI_API);
     assert.equal(message.stopReason, "error");
     assert.ok(message.errorMessage);
-    assert.match(message.errorMessage, /No openai-codex auth found/);
+    assert.match(message.errorMessage, /Provider is not configured: openai/);
   });
 
   test(`${modelId} recovers fast mode through Pi session_start for every supported reason`, async (t) => {
@@ -911,7 +914,7 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
   });
 
   test(`${modelId} does not recover fast mode when the latest overall model_change is not fast`, async (t) => {
-    for (const provider of [CODEX_PROVIDER, "anthropic"]) {
+    for (const provider of [OPENAI_PROVIDER, "anthropic"]) {
       const tempRoot = await mkdtemp(join(tmpdir(), "pi-openai-codex-fast-no-recovery-"));
       const cwd = join(tempRoot, "cwd");
       await mkdir(cwd, { recursive: true });
@@ -926,7 +929,7 @@ for (const modelId of BEHAVIOR_MODEL_IDS) {
       });
       sessionManager.appendModelChange(
         provider,
-        provider === CODEX_PROVIDER ? modelId : "claude-sonnet",
+        provider === OPENAI_PROVIDER ? modelId : "claude-sonnet",
       );
       sessionManager.appendMessage({
         role: "user",

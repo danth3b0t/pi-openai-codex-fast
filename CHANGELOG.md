@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- Replace the legacy fast provider with `openai-fast`, delegating priority requests and authentication to Pi's native `openai` Responses provider. No legacy compatibility alias is registered.
+
 ## 0.0.17 - 2026-09-30
 
 ### Added

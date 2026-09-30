@@ -1,17 +1,18 @@
 # pi-openai-codex-fast
 
-Pi package that adds an `openai-codex-fast` provider backed by built-in `openai-codex` with `serviceTier: "priority"`.
+Pi package that adds an `openai-fast` provider backed by built-in `openai` with `serviceTier: "priority"`.
 
 Requires Pi `>=0.99.1 <0.100.0`.
 
 **Pi's virtual models are not supported.** Pi's experimental virtual models,
 registered with `pi.registerVirtualModel()`, are not tested with this package.
-Select an `openai-codex-fast` model directly.
+Select an `openai-fast` model directly.
 
 ## This fork: Pi subagents
 
-This fork keeps upstream's runtime unchanged and is maintained through small,
-reviewed commits. Install a pinned commit rather than following `main`:
+This fork migrates upstream's priority adapter to Pi's supported `openai` provider
+and is maintained through small, reviewed commits. Install a pinned commit rather
+than following `main`:
 
 ```bash
 pi install git:github.com/danth3b0t/pi-openai-codex-fast@<reviewed-commit>
@@ -20,31 +21,32 @@ pi install git:github.com/danth3b0t/pi-openai-codex-fast@<reviewed-commit>
 With the local `subagent` extension, a parent can choose a fast child explicitly:
 
 ```json
-{"agent":{"model":"openai-codex-fast/gpt-6.1-sol","thinking":"high"},"task":"Review the implementation."}
+{
+  "agent": { "model": "openai-fast/gpt-6.1-sol", "thinking": "high" },
+  "task": "Review the implementation."
+}
 ```
 
 - `agent: {}` inherits the parent's selected provider/model and thinking.
-- An explicit `openai-codex/<model>` child remains normal even under a fast parent.
+- An explicit `openai/<model>` child remains normal even under a fast parent.
 - Fast mode is session-local provider selection, not a global flag. This package
   adds no model-callable tool for switching the parent's own model.
 - Resume needs the companion fix in `~/.pi/agent/extensions/subagent/sessions.ts`:
   restore the latest selected `model_change` on the active branch, falling back
   to the assistant identity only when no selection was recorded. Canonical
-  `openai-codex` replies must not overwrite the selected fast route. Retain the
+  `openai` replies must not overwrite the selected fast route. Retain the
   child's saved thinking and existing model/tool/trust checks.
 - A resumed child keeps its own route, not the parent's current selection.
   The local `resume` interface does not accept a model override.
 
-Verified on Pi 0.99.1 with upstream's mock-provider tests and isolated child
-startup probes for inherited fast, explicit normal, fast resume, and normal
-resume. The probes use fake credentials and exit before making model requests.
+Checked on Pi 0.99.1 using focused mock-provider and subagent resume tests.
 Real priority-tier requests can consume more quota/cost; paid live tests are
 separate from this verification. Do not run upstream's npm publishing workflow
 for this personal fork.
 
 ## Behavior
 
-`openai-codex-fast` is a separate selectable provider that delegates to Pi's built-in `openai-codex` implementation with the same model id and `serviceTier: "priority"`. Normal `openai-codex/<modelId>` selections are left on the normal/default-tier path.
+`openai-fast` is a separate selectable provider that delegates to Pi's built-in `openai` implementation with the same model id and `serviceTier: "priority"`. Normal `openai/<modelId>` selections are left on the normal/default-tier path.
 
 Currently exposed fast models:
 
@@ -57,22 +59,24 @@ Currently exposed fast models:
 - `gpt-5.6-sol`
 - `gpt-5.5`
 
-Runtime behavior when `openai-codex-fast/<modelId>` is selected:
+Runtime behavior when `openai-fast/<modelId>` is selected:
 
-- Reuses existing `openai-codex` auth from Pi auth storage.
-- Sends Codex requests through the built-in Codex response API with `serviceTier: "priority"`.
-- Stores generated assistant messages canonically as built-in Codex, including normal replies, tool-calling replies, and setup/error/aborted replies:
-  - `provider: "openai-codex"`
-  - `api: "openai-codex-responses"`
-- Context-overflow errors are the one exception. They keep `provider: "openai-codex-fast"` with `api: "openai-codex-responses"` because Pi only runs compact-and-retry recovery when the failed message's provider matches the selected model.
-- Does not otherwise rewrite stored assistant history back to `openai-codex-fast`, and never stores `openai-codex-fast-responses`.
-- Preserves Pi's transcript-backed system instructions and tool changes by passing the normalized conversation to the built-in Codex adapter.
+- Reuses existing `openai` auth from Pi auth storage.
+- Sends OpenAI requests through the built-in OpenAI response API with `serviceTier: "priority"`.
+- Stores generated assistant messages canonically as built-in OpenAI, including normal replies, tool-calling replies, and setup/error/aborted replies:
+  - `provider: "openai"`
+  - `api: "openai-responses"`
+- Context-overflow errors are the one exception. They keep `provider: "openai-fast"` with `api: "openai-responses"` because Pi only runs compact-and-retry recovery when the failed message's provider matches the selected model.
+- Does not otherwise rewrite stored assistant history back to `openai-fast`, and never stores `openai-fast-responses`.
+- Preserves Pi's transcript-backed system instructions and tool changes by passing the normalized conversation to the built-in OpenAI adapter.
+- Only `openai-fast` is registered; there is no legacy fast-provider alias or automatic session migration. Old fast child threads fail availability checks instead of silently changing route.
+- ChatGPT subscriptions use `/login openai`; API keys use Pi's normal `openai` configuration. Old Codex credentials are not copied or reused.
 
 Fast-mode recovery:
 
 - No custom fast-mode session state is persisted.
 - On any `session_start` reason (`startup`, `reload`, `new`, `resume`, or `fork`), the extension scans the current branch backward for the latest overall `model_change`.
-- If that latest `model_change` is `openai-codex-fast/<modelId>`, it selects `openai-codex-fast/<modelId>` again.
+- If that latest `model_change` is `openai-fast/<modelId>`, it selects `openai-fast/<modelId>` again.
 - If the latest `model_change` is anything else, it does nothing and lets Pi's normal model recovery handle it.
 - The extension does not handle `session_tree`, so branch switches do not trigger model reconciliation.
 
@@ -90,16 +94,16 @@ pi install .
 pi -e .
 ```
 
-After install, log in to built-in Codex if needed:
+After install, log in to built-in OpenAI if needed:
 
 ```text
-/login openai-codex
+/login openai
 ```
 
 Then select a fast model with `/model`, for example:
 
 ```text
-openai-codex-fast/gpt-5.5
+openai-fast/gpt-5.5
 ```
 
 ## Local development
@@ -126,7 +130,7 @@ runtime's package metadata. Other Pi launches are not affected.
 ### Live test
 
 Run `mise run test:live` to test the packed extension through the shipped Pi
-CLI with the existing Codex login. It exercises `gpt-5.6-luna`, `gpt-6-sol`,
+CLI with the existing OpenAI login. It exercises `gpt-5.6-luna`, `gpt-6-sol`,
 `gpt-6-luna`, and `gpt-6.1-sol` at medium reasoning effort. Each model must pass priority
 requests and pricing, canonical tool history, prompt reload, session resume, a built-in
 file read, and the normal-tier control.
@@ -145,7 +149,7 @@ and CI skip it.
   CLI reports exactly `0.99.1`, the tested version.
 - Runtime: each CLI child process receives `PI_PACKAGE_DIR` set to the selected
   executable's package directory. The Mise task also binds `PI_PACKAGE_DIR` to
-  the repository dependency while it reads the Codex bearer token through
+  the repository dependency while it reads the OpenAI bearer token through
   `pi auth print-bearer-token`.
 
 ## Packaging

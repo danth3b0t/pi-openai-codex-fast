@@ -63,7 +63,7 @@ for (const modelId of ["gpt-5.6-luna", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"]
       await writeFile(
         join(env.PI_CODING_AGENT_DIR, "models.json"),
         JSON.stringify({
-          providers: { "openai-codex": { apiKey: "$PI_FAST_LIVE_API_KEY" } },
+          providers: { openai: { apiKey: "$PI_FAST_LIVE_API_KEY" } },
         }),
       );
       await writeFile(
@@ -79,7 +79,7 @@ for (const modelId of ["gpt-5.6-luna", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"]
         cliPath: cli,
         cwd: temporary,
         env,
-        provider: "openai-codex-fast",
+        provider: "openai-fast",
         model: modelId,
         args: [
           "--offline",
@@ -110,7 +110,7 @@ for (const modelId of ["gpt-5.6-luna", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"]
       ): Promise<void> {
         const state = await client.getState();
         assert.ok(state.model);
-        assert.equal(state.model?.provider, priority ? "openai-codex-fast" : "openai-codex");
+        assert.equal(state.model?.provider, priority ? "openai-fast" : "openai");
         assert.equal(state.model?.id, modelId);
         const events = await client.promptAndWait(prompt, undefined, 90_000);
         assert.deepEqual(
@@ -121,8 +121,8 @@ for (const modelId of ["gpt-5.6-luna", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"]
           (message) => message.role === "assistant",
         );
         for (const message of assistants) {
-          assert.equal(message.provider, "openai-codex");
-          assert.equal(message.api, "openai-codex-responses");
+          assert.equal(message.provider, "openai");
+          assert.equal(message.api, "openai-responses");
           assert.equal(message.model, modelId);
         }
         const assistant = assistants.at(-1);
@@ -184,7 +184,7 @@ for (const modelId of ["gpt-5.6-luna", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"]
         .find((message) => message.role === "toolResult" && message.toolName === "read");
       assert.ok(readResult?.role === "toolResult", "The packaged CLI executed Pi's read tool.");
       assert.equal(readResult.isError, false);
-      await client.setModel("openai-codex", modelId);
+      await client.setModel("openai", modelId);
       await turn("SECOND", "delta", false);
       await client.stop();
       t.diagnostic(
