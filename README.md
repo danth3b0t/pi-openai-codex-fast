@@ -1,4 +1,4 @@
-# pi-openai-codex-fast
+# pi-openai-fast
 
 Pi package that adds an `openai-fast` provider backed by built-in `openai` with `serviceTier: "priority"`.
 
@@ -15,7 +15,7 @@ and is maintained through small, reviewed commits. Install a pinned commit rathe
 than following `main`:
 
 ```bash
-pi install git:github.com/danth3b0t/pi-openai-codex-fast@<reviewed-commit>
+pi install git:github.com/danth3b0t/pi-openai-fast@<reviewed-commit>
 ```
 
 With the local `subagent` extension, a parent can choose a fast child explicitly:
